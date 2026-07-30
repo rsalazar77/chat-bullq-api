@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -86,6 +85,41 @@ export class ChannelAccessService {
     return new Set(channels.map((c) => c.id));
   }
 
+  /**
+   * Resolve um ChannelAccess num Set concreto de channelIds: expande o
+   * atalho 'ALL' e derruba ids que não são canal vivo desta org.
+   *
+   * O filtro importa porque ChannelAgent sobrevive ao soft-delete do canal
+   * — sem ele, o Set de um AGENT carrega grants órfãos que não existem em
+   * lugar nenhum da UI.
+   */
+  async materializeAccess(
+    organizationId: string,
+    access: ChannelAccess,
+  ): Promise<Set<string>> {
+    const channels = await this.prisma.channel.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    const ids = channels.map((c) => c.id);
+    if (access === 'ALL') return new Set(ids);
+    return new Set(ids.filter((id) => access.has(id)));
+  }
+
+  /** Versão sempre-materializada de getAccessibleChannelIds. */
+  async getAccessibleChannelIdSet(
+    userOrganizationId: string,
+    role: OrgRole,
+    organizationId: string,
+  ): Promise<Set<string>> {
+    const access = await this.getAccessibleChannelIds(
+      userOrganizationId,
+      role,
+      organizationId,
+    );
+    return this.materializeAccess(organizationId, access);
+  }
+
   hasAccess(access: ChannelAccess, channelId: string): boolean {
     return access === 'ALL' || access.has(channelId);
   }
@@ -125,48 +159,60 @@ export class ChannelAccessService {
     return membership;
   }
 
-  async listMemberChannels(organizationId: string, userId: string) {
+  /**
+   * Grants explícitos do membro, recortados pelo que o CALLER enxerga.
+   *
+   * OWNER/ADMIN também aparecem com grants aqui: `bypass` só quer dizer
+   * "herda os canais ORG sem precisar de grant" — canal PRIVATE exige
+   * grant explícito pra qualquer role, então devolver [] pra eles (como
+   * era antes) escondia da UI justamente o que ela existe pra editar.
+   */
+  async listMemberChannels(
+    organizationId: string,
+    userId: string,
+    callerAccess: ChannelAccess,
+  ) {
     const membership = await this.getMembership(organizationId, userId);
-    if (this.isBypassRole(membership.role)) {
-      return {
-        bypass: true as const,
-        role: membership.role,
-        channelIds: [] as string[],
-      };
-    }
+    const scope = await this.materializeAccess(organizationId, callerAccess);
     const grants = await this.prisma.channelAgent.findMany({
       where: { userOrganizationId: membership.id },
       select: { channelId: true },
     });
     return {
-      bypass: false as const,
+      bypass: this.isBypassRole(membership.role),
       role: membership.role,
-      channelIds: grants.map((g) => g.channelId),
+      // Fora do escopo do caller não sai daqui: grant em canal privado
+      // alheio (ou em canal já removido) não vaza nem some no próximo save.
+      channelIds: grants.map((g) => g.channelId).filter((id) => scope.has(id)),
     };
   }
 
   /**
-   * Replace the full set of channel grants for a member. Returns the diff
-   * (added + removed) so callers can push live socket-room updates without
-   * forcing a reconnect.
+   * Replace the set of channel grants for a member, DENTRO do que o caller
+   * enxerga. Returns the diff (added + removed) so callers can push live
+   * socket-room updates without forcing a reconnect.
+   *
+   * O recorte por escopo é o que impede um save feito por quem só vê metade
+   * dos canais de apagar os grants da outra metade.
    */
   async setMemberChannels(
     organizationId: string,
     userId: string,
     channelIds: string[],
     grantedById: string,
+    callerAccess: ChannelAccess,
   ): Promise<{ added: string[]; removed: string[]; userId: string }> {
     const membership = await this.getMembership(organizationId, userId);
     // OWNER/ADMIN ainda bypassam canais ORG sem grant, mas grants explícitos
     // continuam relevantes pra canais PRIVATE — então a operação é válida.
 
-    const validChannels = await this.prisma.channel.findMany({
-      where: { id: { in: channelIds }, organizationId, deletedAt: null },
-      select: { id: true },
-    });
-    if (validChannels.length !== channelIds.length) {
-      throw new BadRequestException(
-        'One or more channelIds are invalid for this organization.',
+    // O escopo já vem filtrado por org + canal vivo, então cobre também os
+    // ids de outra org e os de canal removido.
+    const scope = await this.materializeAccess(organizationId, callerAccess);
+    const outOfScope = channelIds.filter((id) => !scope.has(id));
+    if (outOfScope.length) {
+      throw new ForbiddenException(
+        'You cannot grant channels you do not have access to.',
       );
     }
 
@@ -178,7 +224,11 @@ export class ChannelAccessService {
     const targetSet = new Set(channelIds);
 
     const toAdd = channelIds.filter((id) => !existingSet.has(id));
-    const toRemove = [...existingSet].filter((id) => !targetSet.has(id));
+    // Revoga só o que o caller poderia ter concedido. Um grant fora do
+    // escopo dele não é apagado por um payload que sequer o menciona.
+    const toRemove = [...existingSet].filter(
+      (id) => scope.has(id) && !targetSet.has(id),
+    );
 
     await this.prisma.$transaction([
       ...(toRemove.length

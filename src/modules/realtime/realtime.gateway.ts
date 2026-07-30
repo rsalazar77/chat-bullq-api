@@ -123,18 +123,17 @@ export class RealtimeGateway
     userOrganizationId: string,
     role: OrgRole,
   ): Promise<string[]> {
-    if (this.channelAccess.isBypassRole(role)) {
-      const channels = await this.prisma.channel.findMany({
-        where: { organizationId, deletedAt: null },
-        select: { id: true },
-      });
-      return channels.map((c) => c.id);
-    }
-    const grants = await this.prisma.channelAgent.findMany({
-      where: { userOrganizationId },
-      select: { channelId: true },
-    });
-    return grants.map((g) => g.channelId);
+    // Mesma regra do REST: OWNER/ADMIN herdam os canais ORG, mas canal
+    // PRIVATE exige grant explícito até pra eles. Antes daqui sair um
+    // "todos os canais da org" pro bypass, o admin entrava na room de
+    // canal privado sem grant e recebia push de conversa que a API não
+    // deixava ele abrir.
+    const ids = await this.channelAccess.getAccessibleChannelIdSet(
+      userOrganizationId,
+      role,
+      organizationId,
+    );
+    return [...ids];
   }
 
   async handleDisconnect(client: Socket) {
