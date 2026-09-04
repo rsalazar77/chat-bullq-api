@@ -19,6 +19,7 @@ import { Queue } from 'bullmq';
 import { Public } from '../../common/decorators';
 import { ChannelAdapterRegistry } from './channel-adapter.registry';
 import { ChannelsService } from './channels/channels.service';
+import { CommentEventService } from './comment-event.service';
 import { WebhookEventsService } from './webhook-events.service';
 import { WebhookThrottleGuard } from './webhook-throttle.guard';
 
@@ -33,6 +34,7 @@ export class WebhookGatewayController {
     private readonly channelsService: ChannelsService,
     private readonly webhookEvents: WebhookEventsService,
     @InjectQueue('inbound-messages') private readonly inboundQueue: Queue,
+    private readonly commentEvents: CommentEventService,
   ) {}
 
   @Post(':channelType')
@@ -117,6 +119,17 @@ export class WebhookGatewayController {
 
       const parseResult = adapter.parseWebhook(req.body, channel);
 
+      // Comentarios nao entram na fila de mensagens: nao viram conversa e
+      // nao passam pelo pipeline de inbound. Vao direto pro motor de
+      // automacoes como evento proprio.
+      for (const comment of parseResult.comments ?? []) {
+        await this.commentEvents.handle(channel, comment).catch((err) =>
+          this.logger.error(
+            `Falha ao processar comentario ${comment.externalCommentId}: ${err.message}`,
+          ),
+        );
+      }
+
       for (const message of parseResult.messages) {
         await this.inboundQueue.add(
           'process-inbound',
@@ -176,6 +189,19 @@ export class WebhookGatewayController {
 
     if (!adapter.handleVerification) {
       return res.status(200).json({ status: 'ok' });
+    }
+
+    // Verify token de nível de app. A verificação por canal (abaixo) só
+    // funciona quando JÁ EXISTE canal — e no fluxo OAuth o canal só nasce
+    // depois de a Meta ter validado o webhook, que por sua vez exige o
+    // webhook validado. Este fallback quebra o ovo-e-galinha: configure
+    // META_WEBHOOK_VERIFY_TOKEN e cadastre o mesmo valor no painel da Meta.
+    const appVerifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+    if (appVerifyToken) {
+      const result = adapter.handleVerification(query, appVerifyToken);
+      if (result.statusCode === 200) {
+        return res.status(result.statusCode).send(result.body);
+      }
     }
 
     const candidates = await this.channelsService.findActiveByType(channelType);

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChannelType } from '@prisma/client';
 import {
+  NormalizedComment,
   NormalizedInboundMessage,
   NormalizedOutboundMessage,
   MessageContentType,
@@ -11,6 +12,33 @@ import {
 
 @Injectable()
 export class InstagramMessageMapper {
+  /**
+   * Comentario em post/reels.
+   *
+   * A Meta manda ecos dos comentarios da PROPRIA conta no mesmo webhook.
+   * Deixar passar faria a automacao responder ao dono do perfil — e, se a
+   * resposta for outro comentario, ela dispara de novo em laco.
+   */
+  normalizeComment(value: any): NormalizedComment | null {
+    if (!value?.id || !value?.from?.id) return null;
+
+    const text = typeof value.text === 'string' ? value.text : '';
+    if (!text.trim()) return null;
+
+    return {
+      externalCommentId: String(value.id),
+      externalContactId: String(value.from.id),
+      username: value.from.username ? String(value.from.username) : null,
+      text,
+      mediaId: value.media?.id ? String(value.media.id) : null,
+      isReply: !!value.parent_id,
+      timestamp: value.timestamp
+        ? new Date(value.timestamp)
+        : new Date(),
+      rawPayload: value,
+    };
+  }
+
   normalizeInbound(messaging: Record<string, any>): NormalizedInboundMessage | null {
     const senderId = messaging.sender?.id;
     const recipientId = messaging.recipient?.id;

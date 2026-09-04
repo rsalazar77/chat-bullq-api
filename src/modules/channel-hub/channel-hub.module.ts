@@ -2,7 +2,9 @@ import { Module, OnModuleInit, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ChannelAdapterRegistry } from './channel-adapter.registry';
 import { WebhookGatewayController } from './webhook-gateway.controller';
+import { CommentEventService } from './comment-event.service';
 import { ChannelsController } from './channels/channels.controller';
+import { InstagramOAuthController } from './adapters/instagram/instagram-oauth.controller';
 import { ChannelsService } from './channels/channels.service';
 import { ChannelsRepository } from './channels/channels.repository';
 import { ZappfyModule } from './adapters/zappfy/zappfy.module';
@@ -44,8 +46,15 @@ import { WebhookThrottleGuard } from './webhook-throttle.guard';
     GmailModule,
     forwardRef(() => MessagingModule),
   ],
-  controllers: [WebhookGatewayController, ChannelsController],
+  controllers: [
+    WebhookGatewayController,
+    // Antes do ChannelsController: o @Get(':id') dele capturaria
+    // /channels/instagram/oauth/* se viesse primeiro.
+    InstagramOAuthController,
+    ChannelsController,
+  ],
   providers: [
+    CommentEventService,
     ChannelAdapterRegistry,
     ChannelsService,
     ChannelsRepository,

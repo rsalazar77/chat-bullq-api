@@ -149,10 +149,24 @@ export interface StatusUpdate {
   errorMessage?: string;
 }
 
+export interface NormalizedComment {
+  externalCommentId: string;
+  externalContactId: string;
+  username: string | null;
+  text: string;
+  mediaId: string | null;
+  isReply: boolean;
+  timestamp: Date;
+  rawPayload: unknown;
+}
+
 export interface WebhookParseResult {
   messages: NormalizedInboundMessage[];
   statuses: StatusUpdate[];
   errors: WebhookError[];
+  // Opcional de proposito: so o Instagram emite comentario hoje, e tornar
+  // obrigatorio quebraria os outros adapters sem ganho nenhum.
+  comments?: NormalizedComment[];
 }
 
 export interface WebhookError {

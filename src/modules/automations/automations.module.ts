@@ -1,5 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { InstagramModule } from '../channel-hub/adapters/instagram/instagram.module';
+import { ReplyCommentPrivateHandler } from './actions/handlers/reply-comment-private.handler';
 import { PrismaModule } from '../../database/prisma.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { OutboxService } from './outbox/outbox.service';
@@ -26,6 +28,10 @@ import { AUTOMATION_QUEUE } from './automations.constants';
 @Module({
   imports: [
     PrismaModule,
+    // Pro reply_comment_private falar direto com a Graph API do Instagram:
+    // resposta a comentario nao tem conversa nem mensagem previa, entao nao
+    // passa pela fila de outbound como o send_message.
+    InstagramModule,
     RealtimeModule,
     BullModule.registerQueue(
       { name: AUTOMATION_QUEUE },
@@ -36,6 +42,7 @@ import { AUTOMATION_QUEUE } from './automations.constants';
   ],
   controllers: [AutomationsController, AutomationsRunsController],
   providers: [
+    ReplyCommentPrivateHandler,
     KillSwitchService,
     AutomationRedisService,
     OutboxService,

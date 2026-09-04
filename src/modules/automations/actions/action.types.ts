@@ -12,6 +12,9 @@ export const ACTION_TYPES = [
   'move_pipeline_stage',
   'assign_user',
   'send_message',
+  // Resposta privada a comentario do Instagram. Unica acao capaz de mandar
+  // DM sem janela de 24h aberta — ver o handler pro porque.
+  'reply_comment_private',
 ] as const;
 
 export type ActionType = (typeof ACTION_TYPES)[number];

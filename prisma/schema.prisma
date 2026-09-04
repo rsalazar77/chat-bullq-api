@@ -1562,6 +1562,10 @@ enum AutomationTrigger {
   MESSAGE_RECEIVED
   CONVERSATION_STATUS_CHANGED
   CONVERSATION_ASSIGNED
+  // Comentario em post/reels. Nao nasce de conversa — o comentario é
+  // publico e o autor pode nunca ter mandado DM. A conversa só passa a
+  // existir se a automacao responder no privado.
+  COMMENT_RECEIVED
 }
 
 enum AutomationRunStatus {

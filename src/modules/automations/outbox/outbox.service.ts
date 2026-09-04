@@ -127,6 +127,11 @@ export class OutboxService {
         // doing it twice is a no-op at the domain layer too.
         return `${trigger}:${p.target}:${p.target === 'conversation' ? p.conversationId : p.contactId}:${p.tagId}`;
       }
+      case AutomationTrigger.COMMENT_RECEIVED: {
+        const p = payload as TriggerToPayload[typeof AutomationTrigger.COMMENT_RECEIVED];
+        // A Meta reentrega o mesmo comentario em retry; commentId é estavel.
+        return `COMMENT_RECEIVED:${p.commentId}`;
+      }
       case AutomationTrigger.MESSAGE_RECEIVED: {
         const p = payload as TriggerToPayload[typeof AutomationTrigger.MESSAGE_RECEIVED];
         // messageId is unique in our DB — perfect dedup key.

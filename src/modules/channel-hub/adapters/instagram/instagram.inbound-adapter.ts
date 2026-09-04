@@ -70,6 +70,7 @@ export class InstagramInboundAdapter implements InboundChannelPort {
       messages: [],
       statuses: [],
       errors: [],
+      comments: [],
     };
 
     try {
@@ -91,6 +92,18 @@ export class InstagramInboundAdapter implements InboundChannelPort {
         ) {
           continue;
         }
+        // Comentarios chegam em `changes`, nao em `messaging`. Sem isto o
+        // evento entra, casa o canal e e descartado em silencio — que era
+        // o comportamento ate agora.
+        for (const change of entry?.changes || []) {
+          if (change?.field !== 'comments') continue;
+          const normalized = this.mapper.normalizeComment?.(change.value);
+          if (normalized) {
+            result.comments = result.comments || [];
+            result.comments.push(normalized);
+          }
+        }
+
         const messagingEvents = entry?.messaging || [];
         for (const event of messagingEvents) {
           if (event.message) {

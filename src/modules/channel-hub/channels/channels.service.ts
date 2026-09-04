@@ -240,6 +240,28 @@ export class ChannelsService {
   }
 
   /**
+   * Canal INSTAGRAM de uma org pelo id da conta do Instagram. Usado pelo
+   * callback do OAuth pra distinguir primeira conexão de reconexão — sem
+   * isto, reautorizar a mesma conta criaria um canal duplicado e as
+   * conversas antigas ficariam órfãs no canal velho.
+   */
+  async findByInstagramUserId(organizationId: string, igUserId: string) {
+    const candidates = await this.repository.findActiveByTypeAndOrg(
+      ChannelType.INSTAGRAM,
+      organizationId,
+    );
+    return (
+      candidates.find((channel) => {
+        const config = (channel.config ?? {}) as Record<string, any>;
+        return (
+          String(config.igUserId ?? '') === igUserId ||
+          String(config.igBusinessId ?? '') === igUserId
+        );
+      }) ?? null
+    );
+  }
+
+  /**
    * Resolve the channel that owns a given webhook payload by asking the
    * inbound adapter to match against `config`. Returns null when no channel
    * matches — caller MUST drop the event (and ideally log for investigation).

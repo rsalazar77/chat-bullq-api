@@ -65,6 +65,17 @@ import { ContactsRepository } from './contacts/contacts.repository';
     ContactsService,
     ContactsRepository,
   ],
-  exports: [ConversationsService, MessagesService, ConversationFsmService, ContactsService, HistoryImportService, UploadsService],
+  exports: [
+    ConversationsService,
+    MessagesService,
+    ConversationFsmService,
+    ContactsService,
+    HistoryImportService,
+    UploadsService,
+    // Exportado pro CommentEventService do channel-hub reusar o mesmo
+    // upsert com lock por (canal, externalId) — comentario e DM da mesma
+    // pessoa precisam cair no MESMO contato.
+    ContactResolverService,
+  ],
 })
 export class MessagingModule {}

@@ -86,6 +86,15 @@ export const FIELDS_BY_TRIGGER: Record<
     contactId: (p) => p.contactId,
     conversationId: (p) => p.conversationId,
   },
+  [AutomationTrigger.COMMENT_RECEIVED]: {
+    text: (p) => (p as any).text,
+    username: (p) => (p as any).username,
+    mediaId: (p) => (p as any).mediaId,
+    isReply: (p) => (p as any).isReply,
+    commentId: (p) => (p as any).commentId,
+    channelId: (p) => p.channelId,
+    contactId: (p) => p.contactId,
+  },
   [AutomationTrigger.CONVERSATION_ASSIGNED]: {
     fromAssigneeId: (p) => (p as any).fromAssigneeId,
     toAssigneeId: (p) => (p as any).toAssigneeId,
